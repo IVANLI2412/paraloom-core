@@ -1647,6 +1647,18 @@ pub mod paraloom_program {
             v.unbonding_amount = v.unbonding_amount.saturating_add(stake);
             v.unbonding_slot = now_slot.saturating_add(UNBONDING_SLOTS);
             v.stake_amount = 0;
+            // Route the token half into unbonding in lockstep with the SOL half:
+            // it stays in `stake_token_vault`, slashable through the same window,
+            // and is released by `withdraw_unbonded_stake` when `unbonding_slot`
+            // elapses. Without this, `deactivate_validator` freezes
+            // `token_stake_amount` forever in the vault (a deactivated validator
+            // cannot `unregister`, and `withdraw_unbonded_stake` transfers 0 when
+            // `token_unbonding_amount == 0`).
+            let token_stake = v.token_stake_amount;
+            v.token_stake_amount = 0;
+            v.token_unbonding_amount = v
+                .token_unbonding_amount
+                .saturating_add(token_stake);
             let registry = &mut ctx.accounts.validator_registry;
             registry.total_active_stake = registry.total_active_stake.saturating_sub(stake);
             registry.active_validators = registry.active_validators.saturating_sub(1);
